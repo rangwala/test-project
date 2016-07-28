@@ -1,0 +1,686 @@
+\documentclass{llncs} % For LaTeX2e
+%\usepackage{nips11submit_e,times}
+\usepackage{comment}
+\usepackage{epsfig,epstopdf}
+\usepackage{subfigure}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{graphics}
+\usepackage[ruled]{algorithm}
+\usepackage{algorithmic}
+\usepackage[plainpages=true]{hyperref}
+\usepackage{comment}
+\usepackage{color}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+\sloppy
+
+\begin{document}
+\title{Protein Function Prediction using Weak-label Learning}
+\author
+{Guoxian Yu\inst{1,3}\and Guoji Zhang\inst{2} \and
+ Huzefa Rangwala\inst{3} \and Carlotta Domeniconi\inst{3} \and Zhiwen Yu\inst{1}
+\institute{School of Comp. Sci. \& Tech., South China Univ. of Tech., Guangzhou, China
+\and
+School of Sciences, South China Univ. of Tech., Guangzhou, China
+\and
+Department of Computer Science, George Mason Univ., Fairfax, VA, USA
+\email{guoxian.yu@mail.scut.edu.cn, \{magjzh,zhwyu\}@scut.edu.cn, \{rangwala,carlotta\}@cs.gmu.edu}
+}}
+\maketitle
+\begin{abstract}
+Multi-label learning is widely used for predicting functions of proteins. Most of
+multi-label learning methods assume that the proteins with annotation do
+not have any missing  functions. However, in practice, we may just have a
+subset of the ground-truth functions for a protein, and whether the protein has other functions is unknown. To annotate proteins with incomplete annotation, we propose a \textit{Pro}tein Function Prediction  method with \textit{W}eak-label \textit{L}earning (ProWL) and a variant of ProWL (ProWL-IF). Both ProWL and ProWL-IF replenish the functions of proteins under the assumption of partially annotated proteins. In addition, ProWL-IF takes advantage of the knowledge that a protein cannot have certain functions (called \textit{irrelevant functions}), which can further boost the performance of protein function prediction. Our experimental results on protein-protein interaction and gene micro-array expression benchmarks validate the effectiveness of ProWL and ProWL-IF.
+\end{abstract}
+
+\section{Introduction}
+\label{introduction}
+High-throughput biological techniques provide information about the interaction of several thousands of proteins simultaneously. However, most of these proteins are not functionally annotated. To date, even for the most well-studied organisms such as yeast, about 25\% of the proteins remain unknown. As such, protein function annotation is one of the fundamental issues in the post-genomic era \cite{sharan2007network}. It is time-consuming and expensive to manually annotate proteins in biological experiments. For these reasons, it is necessary and promising to develop computational methods to automatically annotate proteins.
+
+Various classical computational models (including classification and clustering methods) have been proposed for annotating proteins. Some approaches annotate proteins using the amino acid sequences associated with these proteins \cite{elisseeff2001kernel,leslie2004mismatch}. Some methods take advantage of the protein protein interactions (PPI) in the cell to predict the functions of proteins \cite{becker2012multifunctional,sharan2007network}. Some approaches annotate proteins by integrating various data sources (including amino acid sequences and PPI)\cite{mostafavi2010fast,tsuda2005fast}.
+
+Proteins are found to have multiple roles and functions; each function can be viewed as a label. Thus multi-label learning techniques are widely studied in protein function prediction \cite{elisseeff2001kernel,tsoumakas2010mining}. Some approaches, first train a classifier for each function and then combine these classifiers' predictions to annotate a protein \cite{leslie2004mismatch}. In particular, some techniques organize the classifiers trained for each function according to the function catalogue hierarchical structure \cite{ashburner2000gene,ruepp2004funcat} and then annotate proteins \cite{barutcuoglu2006hierarchical,cesa2011synergy}. Another
+class of protein function  prediction methods incorporate the correlations between the functions (labels) to improve the
+multi-label prediction accuracy \cite{jiang2011predicting,zhang2011framework}.
+
+All these methods assume the functions associated with proteins are complete and fixed, which is often not true for real-world PPI data. More often we just know a subset of the  functions of a protein, and whether an annotated protein has additional functions is unknown. This type
+of multi-label prediction problem is  referred to as the   `weak label' or `incomplete class assignment' problem \cite{bucak2011multi,sun2010multi}. In this paper, unlike traditional multi-label learning methods \cite{barutcuoglu2006hierarchical,jiang2011predicting,zhang2011framework},
+%which predict protein function under the assumption that the annotated functions of proteins in the training set are complete,
+we develop a method, called \textit{Pro}tein Function Prediction  with \textit{W}eak-label \textit{L}earning (ProWL), which can annotate proteins with incomplete function assignment  in the training set. The approach proposed  in \cite{bucak2011multi,sun2010multi} for multi-label learning with weak labels considers the specified labels of an instance as relevant labels, and all the unspecified labels of the instance as candidates for relevant labels. In practice, we may also know that a protein cannot have certain functions (hereinafter, we call these functions \emph{irrelevant functions}). Both previous approaches  \cite{bucak2011multi,sun2010multi} ignore
+this prior knowledge, which can further boost the performance of protein function prediction. Here, we make use of these irrelevant functions and propose a variation of ProWL, called \textit{Pro}tein Function Prediction with \textit{W}eak-label \textit{L}earning and
+Knowledge of \textit{I}rrelevant \textit{F}unction (ProWL-IF). ProWL-IF can not only leverage the functions associated with a protein, but also the irrelevant ones. We can summarize our key contributions as follows:
+\begin{enumerate}
+\item We consider the incomplete annotation problem for protein function annotation.
+\item We design the ProWL alogrithm to annotate proteins with incomplete annotations, and propose the ProWL-IF algorithm, which takes advantage of both relevant and irrelevant functions to replenish missing functions of proteins.
+\item We compare the proposed methods against other related techniques using various metrics on public available protein datasets, and show their effectiveness.
+\end{enumerate}
+
+\begin{comment}
+The rest of the paper is organized as follows. In Section \ref{relatedwork}, we review related works on multi-label learning with weak label. In Section \ref{problemformulation}, we introduce the ProWL and its variation ProWL-IF. Section \ref{expsetup} details the experimental protocol and Section \ref{expanalysis} discusses the empirical results. In Section \ref{conclusion}, we provide conclusions with directions for future works.
+\end{comment}
+\section{Related work}
+\label{relatedwork}
+Traditional multi-label learning approaches focus on predicting the multiple labels for
+each test instance simultaneously \cite{tsoumakas2010mining}. These methods utilize the label correlations among the different multi-labeled instances \cite{zhang2011framework}, and often assume that the given labels for the training instances are complete and accurate. However, in several real world applications, complete
+or full set of labels may be missing, noisy and not provided. A few weak label (or missing label) learning algorithms have been proposed in the literature within the single label or multiple label learning settings \cite{bucak2011multi,sun2010multi,wang2011mining}. Prediction of the complete set of labels (i.e., predicting the missing labels), given partial or incomplete labels is defined as the weak label learning problem.
+
+% Wang et. al. \cite{wang2011mining} develop an approach for the weak labeled learning problem, but assume
+%a single label per instance, which is similar to a semi-supervised learning approach.
+Sun et. al. \cite{sun2010multi} developed a method called WEak Label Learning (WELL) for predicting missing labels for multi-labeled instances. WELL formulates a convex optimization, that first approximates similarities between labels by assuming a group of low-rank base
+similarities. WELL was validated on a set of text, image and bioinformatic applications.
+Buncak  et. al. \cite{bucak2011multi} studied the incomplete class
+assignments problem for annotating  images, and developed an approach called MLR-GR.
+This method optimizes ranking errors and the group lasso loss.
+Qi et. al. \cite{qi2011mining} uses the Hierarchical Dirichlet Process to append  missing
+labels for set of  images. In addition, Wang et. al. \cite{wang2011mining} developed an approach for annotating weakly labeled facial images. However, this approach
+is a single-label (or multi-class) method and focuses on refining the noisy labeled images.
+
+Several computational approaches have been developed for protein function prediction, that
+differ in terms of methodology, input data, and even problem definition. We refer the reader to a comprehensive survey paper on this topic \cite{pandey06}. Relevant to our work, Chi et. al. \cite{chi2011iterative} proposed an iterative
+protein function prediction method using partial annotations. At each iteration, using the most confident predicted functions, pairwise similarities between training proteins and testing proteins are updated. This updated similarity is used for predicting functions for test proteins at the next iteration.
+
+\begin{comment}
+
+similarity between proteins is updated based on most confidently predicted functions
+Unlike traditional protein function prediction methods
+which predict protein functions in an one-off procedure, recently, Chi et. al. \cite{chi2011iterative} proposed
+an iterative protein function prediction method. The basic assumption of this
+method is that the similarity between proteins will be updated if they are
+partially annotated. To exploit this assumption, in each iteration,
+they update the similarity between proteins based on the currently most
+confidently predicted functions and then expand the predicted functions
+using the updated similarity.\\
+\indent
+\end{comment}
+In our paper,  we develop a new  weak labeled learning algorithm
+for predicting multiple functions (or labels) of proteins.
+We refer to our approach as ProWL, \textit{Pro}tein function prediction with \textit{W}eak-label \textit{L}earning. We extend ProWL to incorporate irrelevant function (or labels) information of proteins and call this approach as ProWL-IF.
+\begin{comment}
+We studied two scenarios: (i) We assume that we are given partial functions for a protein i.e., which
+functions the protein may perform and (ii) We assume that we are given partial labels but XXX
+{\bf HR not complete.}\textbf{I am not fully understanding your intention}
+\end{comment}
+\begin{comment}
+
+  learning in protein function prediction and propose the ProWL and ProWL-C to
+make use of incomplete annotations of proteins. Our experimental
+evaluation demonstrates that ProWL and ProWL-C can replenish the missing
+functions of proteins much better than other related methods. The
+developed approaches outperform other related methods in predicting
+the functions of proteins under various numbers of missing functions. In
+addition, we corroborate the benefit in considering the missing
+functions assumption in annotating proteins.
+\end{comment}
+\begin{comment}
+Multi-label learning with weak-label is seldom
+studied in multi-label learning. Most traditional multi-label
+learning methods focus on utilizing the label correlation among
+multi-label instances \cite{barutcuoglu2006hierarchical,zhang2011framework}. These methods often
+assume that the label set of a multi-label instance is complete, without missing
+and noisy labels. However, in real world data, some labels of a multi-label instance
+may be missing \cite{bucak2011multi,sun2010multi}. In fact, weak-label learning problem is
+quite prevalent in multi-label instances.\\
+\indent
+Although some methods have been proposed to address the weak-label
+problem in single-label scenario \cite{wang2011mining}, few methods have been
+developed to tackle this problem within the multi-label learning
+setting. Sun et. al. \cite{sun2010multi} first studied the \emph{Weak-Label} problem
+in multi-label learning and proposed a method called WEak Lable Learning (WELL). WELL considers
+the classification boundary for each label should go across low density regions and each label
+generally has much smaller number of positive examples than negative
+examples. Based on these two assumptions, WELL solves this problem using
+convex optimization. In order to utilize the label-correlation, they assume that there is a
+group of low-rank based similarities, and the appropriate similarities
+between instances for different labels can be derived from these
+base similarities. However, since WELL depends on quadratic programming to
+get the low-rank based similarities and to do the final prediction, its efficiency
+is restricted by quadratic programming and it can not be applied to a
+large number of proteins with a large number of functions. Nevertheless, weak
+label scenario is common in proteomic datasets with a large number of functions.
+\end{comment}
+\section{Problem Formulation}
+\label{problemformulation}
+In this paper, we study the weak-label problem in protein function prediction for two tasks. In the first task, we have partially labeled proteins: given a protein, some of its functions are specified, and some may be missing.  The task we address is: how can we use these incomplete annotations to replenish the missing functions (cf. Figure \ref{Fig5} (b) and (c))?  In the second task, we address
+the following issue:  how to utilize  the incomplete annotated proteins to annotate proteins which are completely unlabeled  (cf. Figure \ref{Fig5} (d))?
+\begin{figure*}[h!]
+  \centering
+    \subfigure[Original ]{\label{Fig5a}\includegraphics[scale=0.2]{pic/Task1.jpg}}
+    \subfigure[Task1(ProWL) ]{\label{Fig5b}\includegraphics[scale=0.2]{pic/Task11.jpg}}
+    \subfigure[Task1(ProWL-IF) ]{\label{Fig5c}\includegraphics[scale=0.2]{pic/Task12.jpg}}
+     \subfigure[Task2 ]{\label{Fig5d}\includegraphics[scale=0.2]{pic/Task2.jpg}}
+  \caption{ (a) Original data with 1 and 0 representing the relevant and irrelevant functions, respectively. (b) Task 1 (ProWL), where 1 represents
+  the relevant functions, 0 represents the irrelevant functions and ``?'' are the missing functions which are initialized  to 0. The goal for ProWL is to
+  predict relevant functions for a protein treating the irrelevant functions as candidates. (c) Task 1 (ProWL-IF), where 1 and -1 represent
+  the relevant and irrelevant known functions. ``?'' dentoes the missing functions which are set to 0. The goal is to predict the missing functions
+  as relevant or irrelvant. (d) Task 2 definitions of 1, 0 and ``?'' are the same as in (b). However, the goal is to predict function
+  of proteins p5 and p6  which are completely unlabeled.}\label{Fig5}
+\end{figure*}
+\subsection{Protein Function Prediction with Weak-label Learning}
+It is important to make use of function correlations when annotating proteins \cite{jiang2011predicting,zhang2011framework}. Given $n$ proteins, let
+the number of distinct functions across all proteins be $K$. Let
+$Y=[\mathbf{y}_1,\mathbf{y}_2,\ldots,\mathbf{y}_n]$ be the original label set with $y_{ik}=1$ if protein $i$ has the $k$-th function, and $y_{ik}=0$ otherwise. At first, we can define a function correlation matrix $C^{'}\in R^{K\times K}$ based on cosine similarity as follows:
+\begin{equation}
+C^{'}_{st}=\frac{\mathbf{Y}_{.s}^{T}\mathbf{Y}_{.t}}{\|\mathbf{Y}_{.s}\|\|\mathbf{Y}_{.t}\|}
+\label{Eq1}
+\end{equation}
+where $C^{'}_{st}$ is the function correlation between functions $s$ and $t$, and $\mathbf{Y}_{.s}$ represents the $s$-th column of $Y$. From Eq. (\ref{Eq1}), we can observe that, given functions $s$, $t$, and $u$, if functions $s$ and  $t$ often co-exist in the same proteins, while functions $s$ and $u$ seldom co-exist, then $C^{'}_{st}$ will be larger than $C^{'}_{su}$. To interpret $C^{'}$ as a transition probability, we normalize $C^{'}$  as follows:
+\begin{equation}
+C_{st}=\frac{C^{'}_{st}}{\sum_{k=1}^{K} C^{'}_{sk}}
+ \label{Eq2}
+\end{equation}
+Thus, $C_{st}$ can be viewed as the likelihood that a protein has function $t$ given that it is annotated with function $s$.
+
+We now consider the case with incomplete annotation, and define the weighted loss function as the first part of our objective function as follows:
+\begin{equation}
+  \Phi_1(\mathbf{f})=\frac{1}{2} \sum_{i=1}^n \sum_{k=1}^{K} M_{ik}(f_{ik}-\tilde{y}_{ik})^2
+  \label{Eq3}
+\end{equation}
+where $\tilde{Y}=[\tilde{\mathbf{y}}_1,\tilde{\mathbf{y}}_2, \ldots, \tilde{\mathbf{y}}_n]$ is the extended function set of $n$ proteins, with $\tilde{Y}=YC$. $f_{ik}$ is the predicted likelihood of protein $i$ with respect to the $k$-th function. Our motivation in using $\tilde{Y}$ is to append the missing functions based on the labeled ones. More specifically, suppose functions $s$ and $t$ often co-exist in the same proteins. Then, if a protein is annotated with function $s$, it's  likely that it will also have function $t$. $M_{ik}$ is the weight of protein $i$ with respect to function $k$:
+\begin{equation}
+M_{ik}=
+\left\{
+\begin{array}{c}
+1, \quad y_{ik}=1\\
+\mathbf{y}_{i}^{T} \mathbf{c}_{.k}, y_{ik}=0\\
+\end{array}
+\right.
+\label{Eq4}
+\end{equation}
+where $\mathbf{c}_{.k}$ is the $k$-th column of $C$. As defined in Eq. (\ref{Eq4}), if the annotated functions of protein $i$ have large correlations with function $k$, the weight $M_{ik}$ will be large, since protein $i$ is likely to also have function $k$.
+
+Proteins with similar acid amino sequences tend to have similar functions, and the `guilt by association' rule \cite{schwikowski2000network} assumes the interacting proteins are more likely to share similar functions. To make use of this kind of knowledge, as in semi-supervised learning \cite{zhou2004learning}, we incorporate a smoothness term within our objective function:
+\begin{equation}
+\Phi_2(\mathbf{f})=\frac{1}{2} \sum_{i,j=1}^n \|\frac{\mathbf{f}_i}{\sqrt{D_{ii}}}-\frac{\mathbf{f}_j}{\sqrt{D_{jj}}}\|^2 W_{ij} = tr(F^{T}(I-D^{-\frac{1}{2}}WD^{-\frac{1}{2}})F)\\
+= tr(F^TLF)
+\label{Eq5}
+\end{equation}
+where $F=[\mathbf{f}_1,\mathbf{f}_2,\ldots,\mathbf{f}_n]$, $D$ is a diagonal matrix with $D_{ii}=\sum_{j=1}^{n}W_{ij}$. $W_{ij}$ captures
+the similarity between proteins $i$ and $j$. The matrix $W$  can be set as the pairwise sequence similarities,  frequency of interactions found in multiple PPI studies or
+a kernel matrix derived from PPI studies. $I$ is an $n \times n $ identity matrix, $L=I-D^{-\frac{1}{2}}WD^{-\frac{1}{2}}$, and $tr(\cdot)$ is the matrix trace operation.
+
+Our objective function to be minimized is:
+\begin{eqnarray}
+  \Phi(F)&=&\frac{1}{2} \sum_{i=1}^n \sum_{k=1}^{K}  M_{ik}(f_{ik}-\tilde{y}_{ik})^2 +\alpha tr(F^{T}LF)+ \beta \|F^{T}F\|\nonumber\\
+  &=&\frac{1}{2} \|M\circ(F-\tilde{Y})^{T}(F-\tilde{Y})\|  +\alpha tr(F^{T}LF)+ \beta \|F^{T}F\|
+  \label{Eq6}
+\end{eqnarray}
+where $\circ$ means element-wise multiplication (also called Hadamard product). The third term is to control the sparsity of $F$, since each function is associated with a small number of proteins. $\alpha$ and $\beta$ are parameters to balance the importance of the second and third terms, respectively. The motivation to minimize Eq. (\ref{Eq6}) is that we want to seek the prediction that is not only smooth and sparse, but can also append the missing annotations for proteins.
+
+Taking the derivative of Eq. (\ref{Eq6}) with respect to $F$, we have:
+\begin{equation}
+\frac{\partial \Phi(F)}{\partial F}=M \circ (F-\tilde{Y})+ \alpha LF+ \beta IF
+\label{Eq7}
+\end{equation}
+Eq. (\ref{Eq7}) can be divided into $K$ problems and for the $k$-th problem it can be solved as:
+\begin{equation}
+(\tilde{M}_{.k}+\alpha L +\beta I) \mathbf{f}_{.k} = \mathbf{p}_k
+\label{Eq8}
+\end{equation}
+where
+\begin{equation}
+\tilde{M}_{.k}=diag(M_{.k}), \mathbf{p}_k=\mathbf{M}_{.k} \circ \tilde{\mathbf{Y}}_{.k}
+ \label{Eq9}
+\end{equation}
+ $diag(\cdot)$ is the vector diagonalization operation. Instead of computing the inverse of $(\tilde{M}_{.k}+\alpha L+ \beta I)$, Eq. (\ref{Eq8}) can be solved with various existing fast iterative solvers \cite{nocedal1999numerical}. We use the Conjugate Gradient (CG) solver, which is guaranteed to terminate in $n$ steps. The most time-consuming step at each iteration of CG is a matrix vector product, whose time complexity is proportional to the number of non-zero elements in $\tilde{M}_{.k}+\alpha L+ \beta I$. Since $\tilde{M}_{.k}$, $L$ and $I$ are sparse, positive definite, and with $O(n)$ non-zero elements, Eq. (\ref{Eq8}) can be efficiently solved. In our experiments, we find CG terminates in fewer than 30 iterations. The ProWL is described in {\bf Algorithm 1}.
+ \begin{algorithm}[h]
+\caption{ProWL: \textit{Pro}tein Function Prediction with \textit{W}eak-label \textit{L}earning}
+\begin{algorithmic}[1]
+\REQUIRE ~~\\
+\quad Weight matrix $W$, incomplete annotations $Y=[\mathbf{y}_1,\mathbf{y}_2,\ldots,\mathbf{y}_n]$, $\alpha$, $\beta$
+\ENSURE ~~\\
+\quad Predicted likelihood score vectors $\{\mathbf{f}_i\}_{i=1}^{n}$
+\quad \STATE Compute $C$ using Eq. (\ref{Eq3}) and $L=I-D^{-\frac{1}{2}}WD^{-\frac{1}{2}}$.
+\quad \STATE Set $\tilde{Y}=YC$ and initialize $M$ using Eq. (\ref{Eq4}).
+\FOR {$k$ = $1$ to $K$}
+    \STATE Set $\tilde{M}_{.k}$ and $\mathbf{p}_k$ using Eq. (\ref{Eq9}).
+    \STATE Solve $\mathbf{f}_{.k}$ using Eq. (\ref{Eq8})
+\ENDFOR\\
+\STATE \bf return $F=[\mathbf{f}_{.1},\mathbf{f}_{.2},\ldots,\mathbf{f}_{.K}]^T$.
+\end{algorithmic}
+\label{algorithm1}
+\end{algorithm}
+ \subsection{Protein Function Prediction with Weak-label Learning and Knowledge of Irrelevant Functions}
+ In practice, we may know that some functions are \textit{not} associated with specific proteins. However, all the aforementioned multi-label learning methods with weak labels \cite{bucak2011multi,qi2011mining,sun2010multi} consider the irrelevant functions as candidates for missing functions, thus ignoring this knowledge. In this subsection, unlike other methods, we introduce ProWL-IF, a variation of ProWL, which takes advantage of both the annotated relevant and irrelevant functions, in addition to missing functions.
+
+ In this setting, we have a partially annotated function set $Z=[\mathbf{z}_1,\mathbf{z}_2,\ldots,\mathbf{z}_n]$, with $z_{ik}=1$ if protein $i$ has the $k$-th function, $z_{ik}=-1$ if protein $i$ does not have this function, and $z_{ik}=0$ if it's unknown whether the protein has the function i.e., it is missing. At first, we transform $Z$ into $\bar{Z}=[\bar{\mathbf{z}}_1,\bar{\mathbf{z}}_2,\ldots,\bar{\mathbf{z}}_n]$ where $\bar{\mathbf{z}}_{i}=\frac{\mathbf{z}_{i}+|\mathbf{z}_{i}|}{2}$, and $|\mathbf{z}_{i}|$ is the absolute value of $\mathbf{z}_{i}$. Next, we define the correlation between functions $s$ and $t$ based on $\bar{Z}$ as follows:
+ \begin{equation}
+ \tilde{C}_{st}=\frac{\bar{\mathbf{Z}}_{.s}^{T}\bar{\mathbf{Z}}_{.t}}{\|\bar{\mathbf{Z}}_{.s}\|\|\bar{\mathbf{Z}}_{.t}\|}
+ \label{Eq10}
+ \end{equation}
+ where $\bar{\mathbf{Z}}_{.s}$ is the $s$-th column of $\bar{Z}$. To be consistent with ProWL and interpret $\tilde{C}$ as a transition probability, we normalize $\tilde{C}$ as in Eq. (\ref{Eq2}).
+
+ Similarly to Eq. (\ref{Eq3}), the weighted loss function of ProWL-IF is defined as:
+\begin{equation}
+  \Psi_1(\mathbf{f})=\frac{1}{2} \sum_{i=1}^n \sum_{k=1}^{K}  M^{'}_{ik}(f_{ik}-\tilde{z}_{ik})^2
+  \label{Eq11}
+\end{equation}
+where $\tilde{Z}=[\tilde{\mathbf{z}}_1,\tilde{\mathbf{z}}_2, \ldots, \tilde{\mathbf{z}}_n]$ is the extended label set of proteins. For the $i$-th protein with respect to the $k$-th function, $\tilde{z}_{ik}$ is specified as:
+\begin{equation}
+\tilde{z}_{ik}=
+\left\{
+\begin{array}{l}
+z_{ik}, \quad z_{ik}=1 \ or \ z_{ik}=-1\\
+\bar{\mathbf{z}}_{i}^{T} \mathbf{c}_{.k},\quad z_{ik}=0\\
+\end{array}
+\right.
+\label{Eq12}
+\end{equation}
+where $\mathbf{c}_{.k}$ is the $k$-th column of the correlation matrix $C$, and $M^{'}_{ik}$ is the weight of protein $i$ with respect to the $k$-th function:
+\begin{equation}
+M^{'}_{ik}=
+\left\{
+\begin{array}{l}
+1, \quad z_{ik}=1 \ or \ z_{ik}=-1\\
+\bar{\mathbf{z}}_{i}^{T} \mathbf{c}_{.k},\quad z_{ik}=0\\
+\end{array}
+\right.
+\label{Eq13}
+\end{equation}
+Eq. (\ref{Eq11}) looks similar to Eq. (\ref{Eq3}), but  in Eq. (\ref{Eq11}) $\tilde{Z} \in [-1,1]$ and in Eq. (\ref{Eq3}) $\tilde{Y} \in [0,1]$. In addition, Eq. (\ref{Eq11}) does not consider the irrelevant functions as candidate missing functions, whereas Eq. (\ref{Eq3}) does. Therefore, ProWL-IF has the advantage of properly capturing the domain information.
+
+Putting together Eq. (\ref{Eq11}) and Eq. (\ref{Eq5}), the objective of ProWL-IF is to minimize the following function:
+{\scriptsize
+\begin{eqnarray}
+\Psi(F)&=&\frac{1}{2} \sum_{i=1}^n \sum_{k=1}^{K}  M{'}_{ik}(f_{ik}-\tilde{z}_{ik})^2 +\alpha tr(F^{T}LF)+ \beta \|(F+1_{n\times K})^{T}(F+1_{n\times K})\|\nonumber\\
+         &=&\frac{1}{2} \|M^{'}\circ(F-\tilde{Z})^{T}(F-\tilde{Z})\|+\alpha tr(F^{T}LF)+ \beta \|(F+1_{n\times K})^{T}(F+1_{n\times K})\|
+  \label{Eq14}
+\end{eqnarray}
+}
+$\mathbf{1}_{n\times K}$ is an $n \times K$ matrix with all entries equal to 1. The third term controls the complexity and sparsity of $F$, since each protein has a large proportion of irrelevant functions (denoted by -1) and a small proportion of relevant functions (denoted by 1). $\alpha$ and $\beta$ are scalar parameters to balance the importance of the smoothness and sparsity terms, respectively.
+
+Taking the derivation of $\Psi(F)$ with respect to $F$, we have:
+\begin{equation}
+\frac{\partial \Psi(F)}{\partial F}=M^{'} \circ (F-\tilde{Z})+ \alpha LF+ \beta I_{n \times n}(F+1_{n \times K})
+\label{Eq15}
+\end{equation}
+where $I_{n\times n}$ is an $n\times n$ identity matrix. Similar to Eq. (\ref{Eq7}), Eq. (\ref{Eq15}) can be divided into $K$ problems and solved as:
+\begin{equation}
+(\tilde{M}^{'}_{.k}+\alpha L +\beta I_{n\times n}) \mathbf{f}_{.k} = \mathbf{q}_k
+\label{Eq16}
+\end{equation}
+where
+\begin{equation}
+\tilde{M}^{'}_{.k}=diag(\mathbf{M}^{'}_{.k}), \mathbf{q}_k=\mathbf{M}^{'}_{.k} \circ \tilde{\mathbf{Z}}_{.k}- \beta I_{n\times n} \mathbf{1}_{n\times 1}
+ \label{Eq17}
+\end{equation}
+Eq. (\ref{Eq16}) can be efficiently solved in the same way as Eq. (\ref{Eq8}), and the learning procedure for ProWL-IF is similar to that of ProWL ({\bf Algorithm 1}).
+\label{sec:t2:describe}
+\section{Experimental Setup}
+\label{expsetup}
+\subsection{Datasets}
+We evaluate the performance of the proposed methods on public available protein function
+prediction benchmarks, among which three are PPIs and one is a micro-array gene expression data. The first dataset (\textbf{DS1}) was
+extracted from BioGrid \footnote{\href{http://thebiogrid.org/}{http://thebiogrid.org/}} with PubMed ID 17200106, and its largest connected component contains 1002 proteins annotated according to FunCat \cite{ruepp2004funcat}\footnote{\href{http://mips.helmholtz-muenchen.de/proj/funcatDB/}
+{http://mips.helmholtz-muenchen.de/proj/funcatDB/}}, across  33 functions. The functions in FunCat are organized in a tree structure. We use the most informative functions as defined
+in  \cite{jiang2011predicting} and \cite{zhang2011framework}.  Informative functions are the ones that have at least 30 proteins as members, and within the tree structure these functions
+do no not have a particular descendant node with more than 30 proteins.   The second dataset (\textbf{DS2}) was downloaded from BioGrid (2011-12-25). After the preprocessing and filtering, it contains 3041 proteins annotated with 86 informative functions. The weight matrix $W$ of the second dataset are specified by the number of PubMed IDs, where $0$ means no interaction between two proteins and $p>0$ means this interaction is supported by $p$ distinct publications. The third dataset (\textbf{DS3}) was extracted from heterogeneous data sources of humans \cite{mostafavi2010fast}\footnote{\href{http://morrislab.med.utoronto.ca/?sara/SW}{http://morrislab.med.utoronto.ca/?sara/SW}}. We use its largest connected component, which includes 2950 proteins annotated according to the Gene Ontology \cite{ashburner2000gene}. Similar to \cite{mostafavi2010fast}, we use the functions that have at least 30 proteins annotated with them. The fourth dataset (\textbf{DS4}) was used in WELL \cite{sun2010multi}\footnote{\href{http://lamda.nju.edu.cn/files/WELL.rar}{http://lamda.nju.edu.cn/files/WELL.rar}} and includes 1500 proteins annotated with 14 functions. We specify the weight matrix $W$ for proteins in the same way as it was done for WELL. The weight matrices $W$ of DS1 and DS3 were specified by the providers. The statistics of the processed datasets are listed in Table \ref{Table1}.
+\begin{table*}[htb!p]
+\scriptsize
+\caption{Statistics of datasets (Avg$\pm$Std means average number of functions for each protein and its standard deviation)}
+\centering
+\begin{tabular}{|l||c|c|c|}
+\hline
+Dataset& $\#$Proteins& $\#$Functions & Avg$\pm$Std\\
+\hline
+DS1 & 1002 & 33 & $2.00\pm1.37$\\
+DS2 & 3041 & 86 & $1.94\pm1.60$\\
+DS3 & 2950 & 200 & $6.86\pm3.77$\\
+DS4 & 1500 & 14 & $4.23\pm1.58$\\
+\hline
+\end{tabular}
+\label{Table1}
+\end{table*}
+
+To simulate the incomplete annotation settings, we mask the ground truth (or relevant) functions of proteins. For example, if a protein has 5 functions (labels), we can change
+2 functions from 1 to 0. As a result, it becomes unknown  whether these masked functions belong to the protein or not. In this case, the incomplete function (IF) ratio is $2/5=40\%$. To
+simulate the incomplete annotation settings in ProWL-IF, we mask both 1 and -1 to 0s. To keep consistency, the IF ratio is defined in the same way (i.e., mask the
+same IF ratio of relevant functions). In addition, we also mask an equal number of -1s to 0s.
+
+%There are few work have been done on multi-label learning with weak label. Here,
+We compare our methods with WELL \cite{sun2010multi} and MLR-GL \cite{bucak2011multi}.  WELL and MLR-GL  need an input kernel matrix, and
+we substitute the kernel with the PPI matrices, or specify it as in WELL\cite{sun2010multi}. In fact, the
+PPI matrix can also be viewed as a Mercer kernel. The parameters of WELL are specified as the authors reported; for MLR-GL we use the default parameters in the package provided
+by the authors \footnote{\href{http://www.cse.msu.edu/~bucakser/}{http://www.cse.msu.edu/~bucakser/}}. For ProWL and ProWL-IF, we set
+$\alpha$ and $\beta$ to 0.01 and 0.001. We observe the performance with respect to various metrics does not change as we vary $\alpha$ and $\beta$ around the fixed values. This
+setting is not optimal, and we will investigate how to adapt the parameter values in the future.
+
+\subsection{Evaluation Metrics}
+Various performance metrics have been developed for evaluating  multi-label learning methods \cite{tsoumakas2010mining}. Here we introduce
+the metrics used in this paper (some of these metrics were also used in WELL and MLR-GL).
+
+\emph{MacroF1} is the average $F1$ scores of different functions:
+\begin{displaymath}
+\scriptsize
+MacroF1=\frac{1}{K}\sum_{k=1}^{K}\frac{2p_k r_k}{p_k+r_k}
+\end{displaymath}
+where $p_k$ and $r_k$ are the precision and recall of the $k$-th function.
+\begin{comment}
+ and specified as:
+\begin{displaymath}
+p_k=\frac{TP_k}{TP_k+ FP_k} \quad
+r_k=\frac{TP_k}{TP_k+ FN_k}
+\end{displaymath}
+where $TP_k$, $FP_k$ and $FN_k$ are the true positive, false positive and false negative with respect to the $k$-th function.
+\end{comment}
+
+\emph{MicroF1} calculates the $F1$ measure on the predictions of different functions as a whole:
+\begin{displaymath}
+MicroF1=\frac{1}{K}\frac{\sum_{k=1}^{K} 2 p_k r_k}{\sum_{k=1}^{K} p_k+r_k}
+\end{displaymath}
+
+\begin{comment}
+\emph{Average ROC} (AvgROC) score averages the receiver operation curve (ROC) score of each function. ROC Score is calculated as the area under the ROC curve, which plots true positive rate (sensitivity) as a function of false positive rate (1-specificity) under different classification thresholds \cite{gribskov1996use}. It measures the overall quality of the ranking induced by the classifier, instead of the quality of a single value of the threshold in that ranking.
+
+\emph{Accuracy} and \textit{Completeness} were first used in \cite{qi2011mining}. Suppose the predicted function set of $n$ proteins is $F_p$, the initial incomplete annotated function set is $F_q$ and the ground truth function set is $Y$, the \textit{accuracy} is defined as:
+\begin{displaymath}
+Accuracy=\frac {|F_p\bigcap Y|}{|F_p|}
+\end{displaymath}
+and the \emph{Completeness} is:
+\begin{displaymath}
+Completeness=\frac {|(F_p\bigcup F_q)\bigcap Y|}{|Y|}
+\end{displaymath}
+\end{comment}
+
+\emph{Hamming loss} evaluates how many times an instance-label pair is misclassified:
+\begin{displaymath}
+Hamming Loss=\frac{1}{n}\sum_{i=1}^{n}\frac {\|\mathbf{f}_i \bigoplus \mathbf{y}_i\|}{K}
+\end{displaymath}
+where $\bigoplus$ stands for the XOR operation and $\mathbf{y}_i $ is the function set of protein $i$.
+
+\emph{Ranking loss} evaluates the average fraction of function label pairs that are not correctly ordered.
+\begin{eqnarray}
+RankingLoss=\frac{1}{n}\sum_{i=1}^N \frac{1}{|\mathbf{y}_i||\mathbf{\bar{y}}_i|}|
+\{(y_1,y_2) \in \nonumber \\
+\mathbf{y}_i \times \mathbf{\bar{y}}_i
+|F(i,y_1)\leq F(i,y_2)\}|
+\nonumber
+\end{eqnarray}
+where $\mathbf{\bar{y}}_i$ is the complementary set of $\mathbf{y}_i$. The performance is perfect when $RankingLoss=0$.
+
+The adapted \emph{Area Under the Curve} (AUC) for multi-label learning was introduced
+in \cite{bucak2011multi}. AUC first ranks all the functions for each test protein in the descending order of their scores; it then varies the number of predicted functions from 1 to the total number of functions, and computes the receiver operator curve by calculating true positive rate and false positive rate for each number of predicted functions. It finally computes the area under the curve of all functions to evaluate the multi-label learning methods.
+
+\begin{comment}
+\emph{One Error} evaluates how many times the top-ranked function is not in the set of ground-truth functions of the proteins:
+\begin{displaymath}
+OneError=\frac{1}{N}\sum_{i=1}^{N} I(\arg\max_{1\leq k \leq K}F(i,k) \notin \mathbf{y}_i)
+\end{displaymath}
+
+\emph{Average Precision} evaluates the average fraction of labels ranked above a particular label $c\in \mathbf{y}_i$ which is actually in $\mathbf{y}_i$
+\begin{displaymath}
+AveragePrecision=\frac{1}{N}\sum_{i=1}^{N}
+\frac{1}{|\mathbf{y}_i|}
+\sum_{k_1 \in \mathbf{y}_i}
+\frac{|\{k_2 \in \mathbf{y}_i|rank(F(i,k_2))\leq rank(F(i,k_1))\}|}{rank(F(i,k_1))}
+\end{displaymath}
+where $rank(F(i,\cdot))$ is a rank function which ranks the largest $F(i,\cdot) \in R^K$ as 1 and the smallest $F(i,\cdot)$ as $K$.
+\end{comment}
+\emph{Coverage} evaluates how far, on average, we need to go down the function ranking list to cover all the ground-truth functions of the protein:
+\begin{displaymath}
+Coverage=\frac{1}{N}\sum_{i=1}^{N} \max_{k \in \mathbf{y}_i}rank(F(i,k))-1
+\end{displaymath}
+where $rank(F(i,\cdot))$ is a rank function which ranks the largest $F(i,\cdot) \in R^K$ as 1 and the smallest $F(i,\cdot)$ as $K$.  \emph{Coverage} is often bigger than 1, and the lower the value, the better the performance.
+
+For maintaining consistency with other evaluation metrics, we report  \emph{1-HammingLoss} and \emph{1-RankingLoss}. Thus similar to other metrics (except \emph{Coverage}), the higher the value of \emph{1-HammingLoss} and \emph{1-RankingLoss}, the better the performance.
+\section{Experimental Analysis}
+\label{expanalysis}
+\subsection{Performance Replenishing Missing Functions}
+We performed experiments to investigate the performance of the proposed methods in
+replenishing the missing functions. In these experiments, we use all the proteins within the datasets and vary the IF ratio of each protein
+from 20\% to 60\%, with an interval of 10\%, to study the performance of different methods. Some
+proteins in the PPI network do not have functions.  To make use of the PPI network structure, we do not remove them, but
+we evaluate the performance of replenishing missing functions on only
+the annotated proteins. The experimental results (average
+of 20 independent runs and standard deviations)  are shown in
+Figures \ref{Fig1} - \ref{Fig4}. We were not able to run WELL to
+completion  on DS3 (using 4GB RAM).  \emph{MicroF1}, \emph{MacroF1} and \emph{1-HammingLoss} depend
+on a hard partitioning of $\mathbf{f}_i$ into relevant and irrelevant
+functions. Here we consider the functions corresponding to the largest $s$ values of $\mathbf{f}_i$ as the relevant ones, and the remaining as irrelevant functions of protein $i$. $s$ is determined by the number of ground-truth functions of the $i$-th protein.
+
+From the figures, we can observe that ProWL outperforms
+WELL and MLR-GL in replenishing missing functions of proteins in almost
+all the metrics across the four datasets. Taking \emph{MicroF1} on DS4, for example,
+ProWL on average is 6.96\% better than WELL, and 58.70\% better than MLR-GL. These results confirm the effectiveness of ProWL in Task 1.
+
+Another interesting observation from  Figures \ref{Fig1} - \ref{Fig4} is that the multi-label microF1 and macroF1 scores decrease as  the IF ratio increases. However, for DS3 and DS4 the decrease in the F1 scores is not as evident as for DS1 and DS2. This can be explained by the fact that DS3 and DS4 have a larger number of functions per protein, and a higher IF ratio still allows proteins within the set to have a few relevant functions. ProWL uses these functions and replenishes the missing ones.\\
+\indent
+Since the setting of ProWL-IF is different from ProWL, WELL and MLR-GL, we conducted additional experiments on the four datasets to investigate the performance
+of ProWL-IF. In these experiments, we masked 1 and -1 to 0s and set the incomplete function ratio with respect to the relevant functions (+1) similarly to ProWL. The number of masked irrelevant functions (-1) was the same as relevant
+functions. We just report the results with respect to MacroF1 and MicroF1 in Table \ref{Table9} (and will include the remaining results in a supplementary version). From
+this table, we can observe  that ProWL-IF generally
+outperforms ProWL. This observation shows the benefit in making use of irrelevant
+functions as prior knowledge.
+\begin{figure*}[h!t]
+  \centering
+    \subfigure[MicroF1]{\label{Fig1a}\includegraphics[scale=0.25]{pic/17_Mask_MicroF1.eps}}
+    \subfigure[MacroF1]{\label{Fig1b}\includegraphics[scale=0.25]{pic/17_Mask_MacroF1.eps}}
+    \subfigure[1-HammLoss]{\label{Fig1c}\includegraphics[scale=0.25]{pic/17_Mask_HammLoss.eps}}
+    \subfigure[1-RankLoss]{\label{Fig1d}\includegraphics[scale=0.25]{pic/17_Mask_RankLoss.eps}}
+    \subfigure[AUC]{\label{Fig1f}\includegraphics[scale=0.25]{pic/17_Mask_AUC.eps}}
+    \subfigure[Coverage$\downarrow$]{\label{Fig1e}\includegraphics[scale=0.25]{pic/17_Mask_Cov.eps}}
+  \caption{Replenishing missing functions of DS1. {\tiny{$\downarrow$ means the lower the better.}}}
+  \label{Fig1}
+\end{figure*}
+
+\begin{figure*}[h!t]
+  \centering
+    \subfigure[MicroF1]{\label{Fig2a}\includegraphics[scale=0.25]{pic/S_Mask_MicroF1.eps}}
+    \subfigure[MacroF1]{\label{Fig2b}\includegraphics[scale=0.25]{pic/S_Mask_MacroF1.eps}}
+    \subfigure[1-HammingLoss]{\label{Fig2c}\includegraphics[scale=0.25]{pic/S_Mask_HammLoss.eps}}
+    \subfigure[1-RankingLoss]{\label{Fig2d}\includegraphics[scale=0.25]{pic/S_Mask_RankLoss.eps}}
+    \subfigure[AUC]{\label{Fig2e}\includegraphics[scale=0.25]{pic/S_Mask_AUC.eps}}
+    \subfigure[Coverage$\downarrow$]{\label{Fig2f}\includegraphics[scale=0.25]{pic/S_Mask_Cov.eps}}
+  \caption{Replenishing missing functions of DS2. {\tiny{$\downarrow$ means the lower the better.}}}
+  \label{Fig2}
+\end{figure*}
+
+\begin{figure*}[h!t]
+  \centering
+    \subfigure[MicroF1]{\label{Fig3a}\includegraphics[scale=0.27]{pic/H_Mask_MicroF1.eps}}
+    \subfigure[MacroF1]{\label{Fig3b}\includegraphics[scale=0.27]{pic/H_Mask_MacroF1.eps}}
+    \subfigure[1-HammingLoss]{\label{Fig3c}\includegraphics[scale=0.27]{pic/H_Mask_HammLoss.eps}}
+    \subfigure[1-RankingLoss]{\label{Fig3d}\includegraphics[scale=0.27]{pic/H_Mask_RankLoss.eps}}
+    \subfigure[AUC]{\label{Fig3e}\includegraphics[scale=0.27]{pic/H_Mask_AUC.eps}}
+    \subfigure[Coverage$\downarrow$]{\label{Fig3f}\includegraphics[scale=0.27]{pic/H_Mask_Cov.eps}}
+  \caption{Replenishing missing functions of DS3. {\tiny{$\downarrow$ means the lower the better.}}}
+  \label{Fig3}
+\end{figure*}
+
+\begin{figure*}[h!t]
+  \centering
+    \subfigure[MicroF1]{\label{Fig4a}\includegraphics[scale=0.25]{pic/Y_Mask_MicroF1.eps}}
+    \subfigure[MacroF1]{\label{Fig4b}\includegraphics[scale=0.25]{pic/Y_Mask_MacroF1.eps}}
+    \subfigure[1-HammingLoss]{\label{Fig4c}\includegraphics[scale=0.25]{pic/Y_Mask_HammLoss.eps}}
+    \subfigure[1-RankingLoss]{\label{Fig4d}\includegraphics[scale=0.25]{pic/Y_Mask_RankLoss.eps}}
+    \subfigure[AUC]{\label{Fig4e}\includegraphics[scale=0.25]{pic/Y_Mask_AUC.eps}}
+    \subfigure[Coverage$\downarrow$]{\label{Fig4f}\includegraphics[scale=0.25]{pic/Y_Mask_Cov.eps}}
+  \caption{Replenishing missing functions of DS4. {\tiny{$\downarrow$ means the lower the better.}}}
+  \label{Fig4}
+\end{figure*}
+
+\begin{table}[h!]
+\scriptsize
+\caption{Experimental results of ProWL-IF on four datasets. The better performance are shown in boldface (statistical significance is examined via pairwise $t$-test at 95\% significant level).}
+\centering
+\begin{tabular}{|c|c||c|c|c|c||c|c|c|c|}
+\hline
+\multirow{2}{*}{Dataset}&
+\multirow{2}{*}{Method}&
+\multicolumn{4}{|c||}{MicroF1}&
+\multicolumn{4}{|c|}{MacroF1}\\
+\cline{3-10}
+& & $20\%$& $40\%$& $60\%$ & $80\%$ &  $20\%$& $40\%$& $60\%$ & $80\%$\\
+\hline
+\multirow{2}{*}{DS1}
+&ProWL &95.26	&87.79	&76.54 &73.49 &46.17 &45.88	&43.62 &41.65\\
+&ProWL-IF &\bf 98.46 &\bf90.97	&\bf 82.54 &\bf 76.40 &\bf 98.14 &\bf 89.93	&\bf 80.64 &\bf 72.70\\
+\hline
+\multirow{2}{*}{DS2}
+&ProWL &85.35 &77.56 &65.08 &55.24 &35.96	&34.06	&31.75 &29.03\\
+&ProWL-IF &\bf 91.08 &\bf 83.25 &\bf 71.83 &\bf 60.97 &\bf 90.78 &\bf 82.38	&\bf 70.29 &\bf 59.78\\
+\hline
+\multirow{2}{*}{DS3}
+&ProWL &\bf 95.78 &92.31 &78.28 &50.73 &95.48 &91.63 &77.75 &51.98\\
+&ProWL-IF &\bf 97.82 &\bf 93.61 &\bf 83.88 &\bf 60.29 &\bf 97.57 &\bf 92.97	&\bf 82.87 &\bf 59.43\\
+\hline
+\multirow{2}{*}{DS4}
+&ProWL &97.28	&92.47	&83.99 &50.73 &33.74	&34.68	&35.63 &34.12\\
+&ProWL-IF &\bf 98.10 &92.69	&83.86 &\bf 60.29 &\bf 96.95	&\bf 89.74	&\bf 78.73 &\bf 64.36\\
+\hline
+\end{tabular}
+\label{Table9}
+\end{table}
+\subsection{Performance for Task 2 (Completely Unlabeled Test Proteins)}
+We wanted to assess the strengths of ProWL in
+leveraging the partially annotated proteins and making predictions for
+proteins that were completely unannotated. We performed another set of experiments to investigate the performance of ProWL in this scenario. We first partitioned our dataset into two parts: (i) training set with missing annotations and (ii) test set  with no annotations (i.e., completely unannotated). For the training set we varied the IF ratio from 20\% to 80\% in increments of 20\%, and used ProWL to report the prediction performance on the test set only.
+
+To assess the advantage of the missing function assumption, we also include the results for another variation
+of ProWL called ProWL-Part.
+For ProWL-Part we assume  that a missing label
+for a protein in the training set will be set as an irrelevant function for
+  the protein (i.e., set $M_{ik}$ to 0, if the $k$-th function is missing for protein $i$).
+%
+We again report the performance of ProWL-Part for the test set i.e., proteins with no annotations. The experimental results (average of 20 independent runs) are
+reported in Tables \ref{Table2}- \ref{Table5}. The setting of missing functions
+for each protein is determined as in the first set of experiments, but $s$ is specified as the average number of functions of all proteins. Due to space limit, we
+report only the results for \emph{MicroF1}, \emph{1-RankingLoss}, and \emph{AUC} and fix  the training set to 80\% of the dataset and the test set to 20\% of the dataset.
+
+From these tables, we can see that ProWL predicts the functions of proteins with
+higher accuracy than the other methods in most metrics (except \emph{RankingLoss} on DS2). Considering AUC
+on DS1, for example, ProWL on average is 9.39\% better than MLR-GL and 12.17\% better than WELL. With the same IF ratio in all the three metrics, ProWL outperforms ProWL-Part 27 times, ties with ProWL-Part 20 times, and loses to ProWL-Part only one time. This statistic corroborates
+the benefit in introducing the missing function assumption. The difference between ProWL and ProWL-Part diminishes as the IF ratio increases. This
+is because the estimated function correlation becomes inaccurate as the IF ratio increases.
+\begin{table*}[h!]
+\scriptsize
+\caption{Experimental results (avg$\pm$std) on DS1. The best performance and its comparable performance are shown in boldface (statistical significance is examined via pairwise $t$-test at 95\% significant level).}
+\centering
+\begin{tabular}{|c| c| c| c| c| c|}
+\hline
+Metric &IF Ratio &ProWL &ProWL-Part &MLR-GL &WELL\\
+\hline
+\multirow{4}{*}{MicroF1}
+& 20\% &\bf 55.34$\pm$2.63 &53.48$\pm$2.05 &37.15$\pm$2.22 &39.54$\pm$2.89\\
+& 40\% &\bf 54.95$\pm$2.12 &\bf 54.58$\pm$2.99 &37.34$\pm$1.64 &38.06$\pm$2.50\\
+& 60\% &\bf 52.32$\pm$1.64 &\bf 53.12$\pm$2.57 &35.79$\pm$2.50 &33.30$\pm$2.57\\
+& 80\% &\bf 52.97$\pm$1.70 &\bf 53.92$\pm$2.49 &43.04$\pm$2.49 &31.02$\pm$2.21\\
+\hline
+\multirow{4}{*}{1-RankingLoss}
+& 20\% &\bf 88.81$\pm$1.17 &\bf 88.92$\pm$0.99 &74.93$\pm$1.47 &80.58$\pm$1.94\\
+& 40\% &\bf 88.56$\pm$2.05 &\bf 88.46$\pm$1.41 &73.37$\pm$2.13 &80.33$\pm$1.64\\
+& 60\% &\bf 87.88$\pm$1.27 &\bf 87.61$\pm$1.53 &70.85$\pm$1.97 &78.06$\pm$1.34\\
+& 80\% &\bf 87.13$\pm$1.16 &\bf 87.06$\pm$1.35 &67.28$\pm$2.52 &77.55$\pm$1.91\\
+\hline
+\multirow{4}{*}{AUC}
+& 20\% &\bf 88.15$\pm$0.99 &\bf 88.26$\pm$0.98 &82.53$\pm$1.33 &80.63$\pm$2.03\\
+& 40\% &\bf 88.01$\pm$1.98 &\bf 87.58$\pm$1.26 &81.01$\pm$1.12 &79.00$\pm$1.60\\
+& 60\% &\bf 86.67$\pm$1.00 &\bf 86.38$\pm$1.47 &78.77$\pm$1.40 &76.20$\pm$1.39\\
+& 80\% &\bf 85.21$\pm$0.92 &\bf 85.16$\pm$1.46 &75.86$\pm$2.07 &74.42$\pm$1.83\\
+\hline
+\end{tabular}
+\label{Table2}
+\end{table*}
+
+\begin{table*}[h!]
+\scriptsize
+\caption{Experimental results (avg$\pm$std) on DS2. The best performance and its comparable performance are shown in boldface (statistical significance is examined via pairwise $t$-test at 95\% significant level).}
+\centering
+\begin{tabular}{|c| c| c| c| c| c|}
+\hline
+Metric &IF Ratio &ProWL &ProWL-Part &MLR-GL &WELL\\
+\hline
+\multirow{4}{*}{MicroF1}
+& 20\% &\bf 34.04$\pm$1.22 &32.01$\pm$1.20 &22.52$\pm$0.94 &20.10$\pm$0.29\\
+& 40\% &\bf 32.47$\pm$1.21 &31.37$\pm$1.22 &23.33$\pm$1.05 &20.54$\pm$0.88\\
+& 60\% &\bf 30.37$\pm$0.81 &\bf 29.75$\pm$1.34 &24.09$\pm$1.20 &20.88$\pm$0.17\\
+& 80\% &\bf 28.20$\pm$1.25 &\bf 28.92$\pm$1.55 &22.82$\pm$0.98 &18.05$\pm$1.16\\
+\hline
+\multirow{4}{*}{1-RankingLoss}
+& 20\% &62.47$\pm$1.19 &59.45$\pm$2.04 &47.29$\pm$4.10 &\bf 70.95$\pm$1.89\\
+& 40\% &61.43$\pm$1.80 &59.16$\pm$2.13 &44.41$\pm$4.23 &\bf 71.22$\pm$0.88\\
+& 60\% &59.95$\pm$1.80 &58.29$\pm$1.65 &40.62$\pm$3.32 &\bf 73.15$\pm$3.40\\
+& 80\% &56.85$\pm$1.77 &56.77$\pm$2.31 &35.43$\pm$3.50 &\bf 73.37$\pm$1.64\\
+\hline
+\multirow{4}{*}{AUC}
+& 20\% &\bf 80.65$\pm$0.79 &79.54$\pm$0.89 &65.63$\pm$1.39 &75.73$\pm$0.75\\
+& 40\% &\bf 79.80$\pm$0.94 &78.93$\pm$0.96 &62.69$\pm$1.35 &75.74$\pm$0.48\\
+& 60\% &\bf 78.17$\pm$0.62 &\bf 77.91$\pm$1.07 &61.09$\pm$1.38 &76.80$\pm$0.13\\
+& 80\% &\bf 76.14$\pm$0.87 &\bf 76.70$\pm$1.11 &56.14$\pm$1.20 &76.03$\pm$0.41\\
+\hline
+\end{tabular}
+\label{Table3}
+\end{table*}
+
+\begin{table*}[h!]
+\scriptsize
+\caption{Experimental results (avg$\pm$std) on DS3. The best performance and its comparable performance are shown in boldface (statistical significance is examined via pairwise $t$-test at 95\% significant level).}
+\centering
+\begin{tabular}{|c| c| c| c| c| c|}
+\hline
+Metric &IF Ratio &ProWL &ProWL-Part &MLR-GL\\
+\hline
+\multirow{4}{*}{MicroF1}
+& 20\% &\bf 24.68$\pm$1.20 &23.70$\pm$1.07 &14.86$\pm$0.94\\
+& 40\% &\bf 24.62$\pm$1.31 &23.08$\pm$1.29 &14.77$\pm$0.92\\
+& 60\% &\bf 22.90$\pm$1.03 &\bf 22.21$\pm$1.48 &13.35$\pm$1.03\\
+& 80\% &\bf 19.88$\pm$0.89 &\bf 19.92$\pm$1.11 &10.37$\pm$1.06\\
+\hline
+\multirow{4}{*}{1-RankingLoss}
+& 20\% &\bf 76.52$\pm$0.85 &\bf 76.11$\pm$0.86 &70.72$\pm$0.96\\
+& 40\% &\bf 77.74$\pm$0.86 &\bf 77.86$\pm$1.10 &69.27$\pm$1.16\\
+& 60\% &    77.31$\pm$1.15 &\bf 78.21$\pm$1.08 &67.00$\pm$1.16\\
+& 80\% &\bf 77.73$\pm$1.31 &\bf 77.14$\pm$0.93 &64.58$\pm$1.05\\
+\hline
+\multirow{4}{*}{AUC}
+& 20\% &\bf 78.70$\pm$0.78 &77.62$\pm$0.67 &70.75$\pm$1.10\\
+& 40\% &\bf 78.78$\pm$0.71 &76.36$\pm$1.07 &68.51$\pm$1.01\\
+& 60\% &\bf 77.07$\pm$1.10 &74.34$\pm$1.37 &65.06$\pm$1.04\\
+& 80\% &\bf 73.70$\pm$1.25 &70.35$\pm$1.45 &61.45$\pm$0.98\\
+\hline
+\end{tabular}
+\label{Table4}
+\end{table*}
+
+\begin{table*}[h!]
+\scriptsize
+\caption{Experimental results (avg$\pm$std) on DS4. The best performance and its comparable performance are shown in boldface (statistical significance is examined via pairwise $t$-test at 95\% significant level).}
+\centering
+\begin{tabular}{|c| c| c| c| c| c|}
+\hline
+Metric &IF Ratio &ProWL &ProWL-Part &MLR-GL &WELL\\
+\hline
+\multirow{4}{*}{MicroF1}
+& 20\% &\bf 63.04$\pm$1.39 &61.24$\pm$1.48 &60.09$\pm$1.51 &61.75$\pm$1.27\\
+& 40\% &\bf 63.41$\pm$1.72 &62.24$\pm$1.03 &58.78$\pm$0.87 &61.96$\pm$1.03\\
+& 60\% &\bf 63.88$\pm$1.52 &62.13$\pm$1.10 &58.31$\pm$1.28 &61.63$\pm$0.98\\
+& 80\% &\bf 62.16$\pm$1.17 &60.78$\pm$1.41 &53.25$\pm$1.14 &60.29$\pm$1.27\\
+\hline
+\multirow{4}{*}{1-RankingLoss}
+& 20\% &\bf 81.15$\pm$1.09 &80.14$\pm$1.08 &78.31$\pm$1.38 &80.19$\pm$0.94\\
+& 40\% &\bf 81.18$\pm$1.23 &80.35$\pm$0.73 &77.42$\pm$1.09 &80.11$\pm$0.92\\
+& 60\% &\bf 81.64$\pm$1.21 &80.36$\pm$0.86 &76.85$\pm$1.05 &79.91$\pm$0.87\\
+& 80\% &\bf 80.67$\pm$1.00 &79.81$\pm$1.26 &72.97$\pm$0.95 &79.40$\pm$0.95\\
+\hline
+\multirow{4}{*}{AUC}
+& 20\% &\bf 82.22$\pm$1.04 &81.41$\pm$0.88 &80.33$\pm$1.06 &81.09$\pm$0.84\\
+& 40\% &\bf 82.21$\pm$1.14 &81.51$\pm$0.60 &79.47$\pm$0.79 &81.20$\pm$0.87\\
+& 60\% &\bf 82.51$\pm$0.99 &81.55$\pm$0.84 &78.88$\pm$0.98 &80.82$\pm$0.81\\
+& 80\% &\bf 81.64$\pm$0.92 &80.77$\pm$0.96 &75.55$\pm$0.77 &80.48$\pm$0.69\\
+\hline
+\end{tabular}
+\label{Table5}
+\end{table*}
+\section{Conclusion}
+\label{conclusion}
+In this paper, we study the incomplete annotation problem for protein function prediction and propose ProWL to annotate proteins with incomplete annotation. To make use of irrelevant functions of proteins, we introduce a variant of ProWL, called ProWL-IF. Unlike traditional multi-label learning methods, which consider all the missing functions as candidates of relevant functions, ProWL-IF takes into account relevant, irrelevant,  and candidate of relevant functions of proteins. Our experimental results demonstrate that the proposed methods have higher performance than other related methods.
+
+Our methods depend on a well-defined correlation matrix. We will investigate a function correlation scheme that can capture the correlation with a large ratio of missing functions. We plan to extend our method to address a probabilistic function assignment.
+\begin{comment}
+\section{Acknowledgements}
+This work is partially supported by grants from Natural Science Foundation of China (Project Nos. 60973083, 61070090, 61003174 and 61170080), grants from the NSFC-Guangdong Joint Fund (Project No. U1035004 and U1135004) and China Scholarship Council (CSC).
+\end{comment}
+\bibliographystyle{plain}
+\bibliography{TMCWL_Bib}
+\end{document}
